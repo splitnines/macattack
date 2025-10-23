@@ -189,7 +189,7 @@ def send_spoofed_udp(
     try:
         s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
     except PermissionError:
-        print("ERROR: root privileges required (or CAP_NET_RAW). Exiting.")
+        print("ERROR: must be run as root.")
         sys.exit(1)
 
     try:
@@ -205,7 +205,7 @@ def send_spoofed_udp(
             macs = list(gen_macs_random(count, base_oui=base_oui))
 
         if not macs:
-            print("No MACs generated; exiting.")
+            print("Error: no macs generated.")
             return
 
         print(
@@ -217,7 +217,7 @@ def send_spoofed_udp(
         sent_total = 0
         interval = 1.0 / rate if rate > 0 else 0
         start_time = time.time()
-        next_report = start_time + 5.0  # report every ~5s
+        next_report = start_time + 1.0  # report every ~1s
 
         print(
             f"Starting continuous send on {iface}: dst_mac={dst_mac_str}, "
@@ -275,7 +275,7 @@ def send_spoofed_udp(
                             "pkt/s). Current src_mac="
                             f"{bytes_to_mac_str(src_mac)}"
                         )
-                        next_report = now + 5.0
+                        next_report = now + 1.0
 
         except KeyboardInterrupt:
             # graceful stop on Ctrl-C
@@ -360,10 +360,7 @@ def main():
         print("--count must be > 0")
         sys.exit(2)
     if not os.geteuid() == 0:
-        print(
-            "Warning: not running as root. You will likely get a permission "
-            "error. Run as root."
-        )
+        print("Error: Must be run as root.")
     send_spoofed_udp(
         iface=args.iface,
         dst_mac_str=args.dst_mac,
