@@ -3,9 +3,10 @@
 macattack.py
 
 Send UDP packets as raw Ethernet frames with a different source MAC per frame,
-recycling the same MAC list continuously.
+recycling the same mac list continuously.
 
 Linux only (uses AF_PACKET raw sockets). Must be run as root (or CAP_NET_RAW).
+ -- sudo setcap cap_net_raw+ep $(which python3)
 
 Usage:
   sudo python3 macattack.py --iface eth0 --dst-mac aa:bb:cc:dd:ee:ff --count
@@ -23,8 +24,6 @@ import sys
 import time
 from typing import Iterator, List
 
-# ---------------- Utilities ----------------
-
 
 def mac_str_to_bytes(mac: str) -> bytes:
     s = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
@@ -32,7 +31,9 @@ def mac_str_to_bytes(mac: str) -> bytes:
         return bytes(int(s[i : i + 2], 16) for i in range(0, 12, 2))
     if len(s) == 6:
         return bytes(int(s[i : i + 2], 16) for i in range(0, 6, 2))
-    raise ValueError(f"MAC/OUI must be 6 or 12 hex digits (received {mac!r})")
+    raise ValueError(
+        f"Error: mac must be 6 or 12 hex digits (received {mac!r})"
+    )
 
 
 def bytes_to_mac_str(b: bytes) -> str:
@@ -68,9 +69,6 @@ def gen_macs_random(count: int, base_oui: str = "02:00:00") -> Iterator[bytes]:
             continue
         seen.add(n)
         yield int_to_mac_bytes(n, base_oui)
-
-
-# --------------- Checksums & Headers ---------------
 
 
 def checksum_ipv4(header: bytes) -> int:
@@ -169,7 +167,8 @@ def build_eth_frame(
     return eth_hdr + payload
 
 
-# --------------- Sender (continuous) ---------------
+def qbf() -> str:
+    return "The quick brown fox jumped over the lazy dog 0123456789"
 
 
 def send_spoofed_udp(
@@ -184,7 +183,6 @@ def send_spoofed_udp(
     mode: str,
     base_oui: str,
 ):
-    # open raw socket
     s = None
     try:
         s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
@@ -196,13 +194,12 @@ def send_spoofed_udp(
         s.bind((iface, 0))
         dst_mac = mac_str_to_bytes(dst_mac_str)
 
-        # generate and store MAC list once
         if mode == "sequential":
             macs: List[bytes] = list(
                 gen_macs_sequential(count, start=0, base_oui=base_oui)
             )
         else:
-            macs = list(gen_macs_random(count, base_oui=base_oui))
+            macs: List[bytes] = list(gen_macs_random(count, base_oui=base_oui))
 
         if not macs:
             print("Error: no macs generated.")
@@ -217,7 +214,7 @@ def send_spoofed_udp(
         sent_total = 0
         interval = 1.0 / rate if rate > 0 else 0
         start_time = time.time()
-        next_report = start_time + 1.0  # report every ~1s
+        next_report = start_time + 1.0
 
         print(
             f"Starting continuous send on {iface}: dst_mac={dst_mac_str}, "
@@ -225,15 +222,13 @@ def send_spoofed_udp(
         )
 
         try:
-            # infinite loop: iterate through macs in order repeatedly
             cycle = 0
             while True:
                 cycle += 1
                 for idx, src_mac in enumerate(macs, start=1):
-                    i = (cycle - 1) * len(macs) + idx  # logical packet number
-                    payload = f"pkt {i}".encode("ascii")
+                    i = (cycle - 1) * len(macs) + idx
+                    payload = f"{qbf()} - pkt {i}".encode("ascii")
 
-                    # increment identification per packet
                     ident = (ident + 1) & 0xFFFF
 
                     udp_hdr = build_udp_header(
@@ -265,7 +260,6 @@ def send_spoofed_udp(
                     if interval > 0:
                         time.sleep(interval)
 
-                    # periodic progress report
                     now = time.time()
                     if now >= next_report:
                         elapsed = now - start_time
@@ -278,7 +272,6 @@ def send_spoofed_udp(
                         next_report = now + 1.0
 
         except KeyboardInterrupt:
-            # graceful stop on Ctrl-C
             elapsed = time.time() - start_time
             avg_rate = sent_total / elapsed if elapsed > 0 else 0
             print(
@@ -293,9 +286,6 @@ def send_spoofed_udp(
                 s.close()
             except Exception:
                 pass
-
-
-# --------------- CLI ---------------
 
 
 def parse_args():
@@ -346,7 +336,7 @@ def parse_args():
     p.add_argument(
         "--base-oui",
         default="02:00:00",
-        help="Base OUI (first 3 octets) for generated source MACs",
+        help="Base OUI for generated source MACs",
     )
     return p.parse_args()
 
