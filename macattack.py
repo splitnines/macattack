@@ -3,7 +3,8 @@
 macattack.py
 
 Send UDP packets as raw Ethernet frames with a different source MAC per frame,
-recycling the same mac list continuously.
+recycling the same mac list continuously.  It is intended to be used in a lab
+setting to load test a layer 2 switch by poplulating the MAC address table.
 
 Linux only (uses AF_PACKET raw sockets). Must be run as root (or CAP_NET_RAW).
  -- sudo setcap cap_net_raw+ep $(which python3)
