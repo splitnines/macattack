@@ -15,6 +15,7 @@ Usage:
 """
 
 from __future__ import annotations
+
 import argparse
 import os
 import random
@@ -29,16 +30,15 @@ from typing import Iterator, List
 def mac_str_to_bytes(mac: str) -> bytes:
     s = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
     if len(s) == 12:
-        return bytes(int(s[i : i + 2], 16) for i in range(0, 12, 2))
+        return bytes(int(s[i:i + 2], 16) for i in range(0, 12, 2))
     if len(s) == 6:
-        return bytes(int(s[i : i + 2], 16) for i in range(0, 6, 2))
+        return bytes(int(s[i:i + 2], 16) for i in range(0, 6, 2))
     raise ValueError(
-        f"Error: mac must be 6 or 12 hex digits (received {mac!r})"
-    )
+        f"Error: mac must be 6 or 12 hex digits (received {mac!r})")
 
 
 def bytes_to_mac_str(b: bytes) -> str:
-    return ":".join(f"{x:02x}" for x in b)
+    return ":".join(f"{i:02x}" for i in b)
 
 
 def int_to_mac_bytes(n: int, base_oui: str = "02:00:00") -> bytes:
@@ -47,17 +47,16 @@ def int_to_mac_bytes(n: int, base_oui: str = "02:00:00") -> bytes:
         base = base[:3]
     if len(base) != 3:
         raise ValueError(
-            "base_oui must decode to exactly 3 bytes (3-octet OUI)"
-        )
+            "base_oui must decode to exactly 3 bytes (3-octet OUI)")
     if not (0 <= n < (1 << 24)):
         raise ValueError("n out of range for 3-octet suffix")
     suffix = bytes([(n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF])
     return base + suffix
 
 
-def gen_macs_sequential(
-    count: int, start: int = 0, base_oui: str = "02:00:00"
-) -> Iterator[bytes]:
+def gen_macs_sequential(count: int,
+                        start: int = 0,
+                        base_oui: str = "02:00:00") -> Iterator[bytes]:
     for i in range(start, start + count):
         yield int_to_mac_bytes(i & 0xFFFFFF, base_oui)
 
@@ -83,16 +82,10 @@ def checksum_ipv4(header: bytes) -> int:
     return (~s) & 0xFFFF
 
 
-def udp_checksum(
-    src_ip: bytes, dst_ip: bytes, udp_header: bytes, payload: bytes
-) -> int:
-    pseudo = (
-        src_ip
-        + dst_ip
-        + struct.pack(
-            "!BBH", 0, socket.IPPROTO_UDP, len(udp_header) + len(payload)
-        )
-    )
+def udp_checksum(src_ip: bytes, dst_ip: bytes, udp_header: bytes,
+                 payload: bytes) -> int:
+    pseudo = (src_ip + dst_ip + struct.pack("!BBH", 0, socket.IPPROTO_UDP,
+                                            len(udp_header) + len(payload)))
     sdata = pseudo + udp_header + payload
     if len(sdata) % 2:
         sdata += b"\x00"
@@ -149,9 +142,8 @@ def build_ipv4_header(
     return header
 
 
-def build_udp_header(
-    src_port: int, dst_port: int, payload: bytes, src_ip: str, dst_ip: str
-) -> bytes:
+def build_udp_header(src_port: int, dst_port: int, payload: bytes, src_ip: str,
+                     dst_ip: str) -> bytes:
     length = 8 + len(payload)
     header_wo_cksum = struct.pack("!HHHH", src_port, dst_port, length, 0)
     src_ip_b = socket.inet_aton(src_ip)
@@ -161,9 +153,8 @@ def build_udp_header(
     return header
 
 
-def build_eth_frame(
-    dst_mac: bytes, src_mac: bytes, ethertype: int, payload: bytes
-) -> bytes:
+def build_eth_frame(dst_mac: bytes, src_mac: bytes, ethertype: int,
+                    payload: bytes) -> bytes:
     eth_hdr = dst_mac + src_mac + struct.pack("!H", ethertype)
     return eth_hdr + payload
 
@@ -197,8 +188,7 @@ def send_spoofed_udp(
 
         if mode == "sequential":
             macs: List[bytes] = list(
-                gen_macs_sequential(count, start=0, base_oui=base_oui)
-            )
+                gen_macs_sequential(count, start=0, base_oui=base_oui))
         else:
             macs: List[bytes] = list(gen_macs_random(count, base_oui=base_oui))
 
@@ -208,8 +198,7 @@ def send_spoofed_udp(
 
         print(
             f"Generated {len(macs)} source MACs. First: "
-            f"{bytes_to_mac_str(macs[0])} Last: {bytes_to_mac_str(macs[-1])}"
-        )
+            f"{bytes_to_mac_str(macs[0])} Last: {bytes_to_mac_str(macs[-1])}")
 
         ident = random.randrange(0, 0xFFFF)
         sent_total = 0
@@ -217,10 +206,8 @@ def send_spoofed_udp(
         start_time = time.time()
         next_report = start_time + 1.0
 
-        print(
-            f"Starting continuous send on {iface}: dst_mac={dst_mac_str}, "
-            f"src_ip={src_ip}, dst_ip={dst_ip}, rate={rate} pkt/s"
-        )
+        print(f"Starting continuous send on {iface}: dst_mac={dst_mac_str}, "
+              f"src_ip={src_ip}, dst_ip={dst_ip}, rate={rate} pkt/s")
 
         try:
             cycle = 0
@@ -232,27 +219,23 @@ def send_spoofed_udp(
 
                     ident = (ident + 1) & 0xFFFF
 
-                    udp_hdr = build_udp_header(
-                        src_port, dst_port, payload, src_ip, dst_ip
-                    )
+                    udp_hdr = build_udp_header(src_port, dst_port, payload,
+                                               src_ip, dst_ip)
                     ip_hdr = build_ipv4_header(
                         src_ip,
                         dst_ip,
                         len(udp_hdr) + len(payload),
                         identification=ident,
                     )
-                    frame = build_eth_frame(
-                        dst_mac, src_mac, 0x0800, ip_hdr + udp_hdr + payload
-                    )
+                    frame = build_eth_frame(dst_mac, src_mac, 0x0800,
+                                            ip_hdr + udp_hdr + payload)
 
                     try:
                         s.send(frame)
                         sent_total += 1
                     except BrokenPipeError:
-                        print(
-                            "Socket send error (BrokenPipe). The NIC/driver "
-                            "may have rejected frame."
-                        )
+                        print("Socket send error (BrokenPipe). The NIC/driver "
+                              "may have rejected frame.")
                         raise
                     except OSError as e:
                         print(f"Socket send OSError: {e}")
@@ -265,21 +248,17 @@ def send_spoofed_udp(
                     if now >= next_report:
                         elapsed = now - start_time
                         rate_obs = sent_total / elapsed if elapsed > 0 else 0
-                        print(
-                            f"Sent {sent_total} frames (avg {rate_obs:.1f} "
-                            "pkt/s). Current src_mac="
-                            f"{bytes_to_mac_str(src_mac)}"
-                        )
+                        print(f"Sent {sent_total} frames (avg {rate_obs:.1f} "
+                              "pkt/s). Current src_mac="
+                              f"{bytes_to_mac_str(src_mac)}")
                         next_report = now + 1.0
 
         except KeyboardInterrupt:
             elapsed = time.time() - start_time
             avg_rate = sent_total / elapsed if elapsed > 0 else 0
-            print(
-                f"\n\nKeyboardInterrupt received — stopping. Sent "
-                f"{sent_total} frames in {elapsed:.2f}s (avg {avg_rate:.1f} "
-                "pkt/s)."
-            )
+            print(f"\n\nKeyboardInterrupt received — stopping. Sent "
+                  f"{sent_total} frames in {elapsed:.2f}s (avg {avg_rate:.1f} "
+                  "pkt/s).")
 
     finally:
         if s is not None:
@@ -292,14 +271,13 @@ def send_spoofed_udp(
 def parse_args():
     p = argparse.ArgumentParser(
         description="Send UDP frames with spoofed source MAC per frame "
-        "(Linux, root)."
-    )
-    p.add_argument(
-        "--iface", required=True, help="Interface to send on (e.g. eth0)"
-    )
-    p.add_argument(
-        "--dst-mac", required=True, help="Destination MAC (aa:bb:cc:dd:ee:ff)"
-    )
+        "(Linux, root).")
+    p.add_argument("--iface",
+                   required=True,
+                   help="Interface to send on (e.g. eth0)")
+    p.add_argument("--dst-mac",
+                   required=True,
+                   help="Destination MAC (aa:bb:cc:dd:ee:ff)")
     p.add_argument(
         "--src-ip",
         default="10.254.1.1",
@@ -310,12 +288,14 @@ def parse_args():
         default="10.255.1.1",
         help="Destination IP address used in IPv4 header",
     )
-    p.add_argument(
-        "--src-port", type=int, default=12345, help="UDP source port"
-    )
-    p.add_argument(
-        "--dst-port", type=int, default=12345, help="UDP destination port"
-    )
+    p.add_argument("--src-port",
+                   type=int,
+                   default=12345,
+                   help="UDP source port")
+    p.add_argument("--dst-port",
+                   type=int,
+                   default=12345,
+                   help="UDP destination port")
     p.add_argument(
         "--count",
         type=int,
